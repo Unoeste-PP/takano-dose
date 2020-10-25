@@ -1,0 +1,237 @@
+---
+title: "Hudson"
+author: "Maxwel Coura Oliveira"
+date: "10/12/2020"
+output: html_document
+---
+
+# Load the packages 😁
+
+```{r include=FALSE}
+library(tidyverse) # pacote dos graficos e manipulacao dos dados etc
+library(drc) # pacote da dose resposta
+library(skimr)
+```
+
+# Importa dataset
+
+```{r}
+data <- read_csv("ic50.csv") # importando os dados
+# apareceu um aviso que 2 colunas estao duplicadas (mesmo nome)
+```
+
+# Data manipulation
+
+```{r}
+# manipulacao de dados
+new_dt <- data %>% 
+   pivot_longer(cols = 3:30, # juntando todos herbicidas em 1 coluna
+                names_to = "herbicide", # nome da coluna
+                values_to = "resp") %>% # valores varial resposta
+  mutate_if(is.character, as.factor) %>%  # passando herbicide para factor
+  mutate(resp = round(resp, 2), # 2 casas decimais para a resp
+         dose = round(dose, 0)) # casas decimais 0 para dose
+```
+
+# Data view
+
+```{r}
+glimpse(new_dt) # olhando seus dados
+```
+
+```{r}
+skim(new_dt) # outra forma de visulizar seus dados
+```
+
+# Data visualization
+
+```{r}
+new_dt %>% 
+  ggplot(aes(x=dose, y=resp, color=herbicide)) + 
+  geom_point(show.legend = FALSE)
+```
+
+# Modeling
+
+## Using l4 (logistic with 4 parameter)
+
+```{r warning=FALSE}
+# Fazendo um modelo unico para todos os herbicidas
+# usei a funcao l4
+model <- drm(resp ~ dose, herbicide, fct=l4(fixed = c(NA, NA, NA, NA), names = c("slope", "lower", "upper", "ed50")), data = new_dt)
+summary(model)
+```
+
+## Checking the other models
+
+```{r warning=FALSE}
+# Vamos testar qual funcao sairia melhor com esses dados
+# Selecionei os principais modelos na lista
+mselect(model, fctList = list(W2.3(), W1.3(), l3(),  W1.4(), W2.4(), L.4(), LL.4()), nested = FALSE,
+sorted = c("IC", "Res var", "Lack of fit", "no"), linreg = FALSE, icfct = AIC)
+# resultado mostra que W1.3() eh a melhor opcao
+```
+
+## Using W1.3
+
+Weibull logistic model with 3 parameter
+
+```{r  warning=FALSE}
+model2 <- drm(resp ~ dose, herbicide, fct=W1.3(fixed = c(NA, NA, NA), names = c("slope", "upper", "ed50")), data = new_dt)
+summary(model2)
+
+# Alguns herbicidas nao estao convergindo (12763099 e 12769961)! Veja a quantidade de parametros com NAs. 
+```
+
+I am trying to fit 28 herbicides in a single. It is likely that some will not converge. Because I am fitting all herbicides in a single model, I am removing three herbicides that is showing NAs in parameters. See the next step.
+
+## Fitting again
+
+Weibull logistic model with 3 parameter. I have removed 3 herbicides that did not converge.
+
+```{r  warning=FALSE}
+new_dt_2 <- new_dt %>% # new dataset to remove 3 herbicides
+  filter(herbicide != "12763099" &
+         herbicide != "12769961" &
+         herbicide !=  "12690527")
+
+model_3 <- drm(resp ~ dose, herbicide, fct=W1.3(fixed = c(NA, NA, NA), names = c("slope", "upper", "ed50")), data = new_dt_2)
+summary(model_3)
+```
+
+## EDs
+
+Effective dose that matches the 50% and 90% in your y-axis. Pay attention to the absolute or relative values.
+
+```{r}
+ED(model_3, c(50,90), type="absolute", interval = "delta")
+# type = absolute eh pq ta mostrando o 50% no eixo y / se colocar "relative" vai mostrar relativo ao upper limit de cada herbicida
+```
+
+## Comparing EDs 50
+
+```{r}
+# t-test comparando as ED50 de cada herbicida
+EDcomp(model_3, c(50,50), type="absolute", interval = "delta")
+# type = absolute mesmo sentido do que foi explicado
+```
+
+# Data visualization
+
+## Data preparation
+
+Drc package is still not easy to work with ggplot (the best data viz package). We need to do some work arounds before plotting.
+
+```{r Control prediction, include=FALSE}
+newdata <- expand.grid(dose=exp(seq(log(0.5), log(1000), length=1000)))
+
+newdata1 <- data.frame(herbicide =c("12692543"), newdata)
+newdata2 <- data.frame(herbicide =c("12692555"), newdata)
+newdata3 <- data.frame(herbicide =c("12432815"), newdata)
+newdata4 <- data.frame(herbicide =c("12692547"), newdata)
+newdata5 <- data.frame(herbicide =c("12665563"), newdata)
+newdata6 <- data.frame(herbicide =c("12769963"), newdata)
+newdata7 <- data.frame(herbicide =c("12771723"), newdata)
+newdata8 <- data.frame(herbicide =c("6605"), newdata)
+newdata9 <- data.frame(herbicide =c("6665"), newdata)
+newdata10 <- data.frame(herbicide =c("139324"), newdata)
+newdata11 <- data.frame(herbicide =c("651869"), newdata)
+newdata12 <- data.frame(herbicide =c("654755"), newdata)
+newdata13 <- data.frame(herbicide =c("12321045"), newdata)
+newdata14 <- data.frame(herbicide =c("12721871"), newdata)
+newdata15 <- data.frame(herbicide =c("669329"), newdata)
+newdata16 <- data.frame(herbicide =c("12640095"), newdata)
+newdata17 <- data.frame(herbicide =c("12771723_1"), newdata)
+newdata18 <- data.frame(herbicide =c("12778693"), newdata)
+newdata19 <- data.frame(herbicide =c("12771019"), newdata)
+newdata20 <- data.frame(herbicide =c("12771021"), newdata)
+newdata21 <- data.frame(herbicide =c("12718827"), newdata)
+newdata22 <- data.frame(herbicide =c("12775311"), newdata)
+newdata23 <- data.frame(herbicide =c("659292"), newdata)
+newdata24 <- data.frame(herbicide =c("12771021_1"), newdata)
+newdata25 <- data.frame(herbicide =c("156054"), newdata)
+
+
+nd=rbind(newdata1, newdata2, newdata3, newdata4, newdata5, 
+         newdata6, newdata7, newdata8, newdata9, newdata10,
+         newdata11, newdata12, newdata13, newdata14, newdata15,
+         newdata16, newdata17, newdata18, newdata19, newdata20,
+         newdata21, newdata22, newdata23, newdata24, newdata25
+         )
+pm <- predict(model_3, newdata=nd, interval="confidence")
+
+nd$p <- pm[,1] 
+nd$pmin <- pm[,2] 
+nd$pmax <- pm[,3] 
+
+new_dt_2$dose0 <- new_dt_2$dose
+new_dt_2$dose0[new_dt_2$dose0==0] <- 0.5
+```
+
+## Plotting the model
+
+```{r Control Plot, message=FALSE, warning=FALSE}
+ggplot(new_dt_2, aes(x = dose, y = resp, color=herbicide)) +    
+  geom_line(data=nd, aes(x=dose, y=p), size=1.3) +
+  labs(fill="", y="response", x=expression(bold(paste("Herbicide (g ai ha "^"-1",")")))) +
+  scale_x_continuous(breaks=c(1, 10, 100, 1000, 10000)) + 
+  coord_trans(x="log") +
+  theme(axis.text=element_text(size=12, color="black"), 
+        axis.title=element_text(size=16, face="bold"), 
+        panel.background = element_rect(fill="white", color = "black"), 
+        panel.grid.major = element_line(color = "white"), 
+        panel.grid.minor = element_blank(),
+        legend.key.width = unit(1, "line"),
+        legend.position=c(0.15, 0.2), 
+        legend.text = element_text(size = 8, colour = "black"), 
+        legend.key = element_rect(fill=NA),           
+        panel.border=element_rect(fill=NA, color="black", size=0.7, 
+                                  linetype = "solid"), 
+        legend.background = element_rect(fill =NA),      
+        legend.title=element_blank()) + #ylim(0,100) +
+   ggsave("figure.png", units="in", width=10, height=10, dpi=300)
+```
+
+# Fitting the removed models
+
+## New dataset
+
+```{r}
+new_dt_3 <- new_dt %>% # new dataset witg 3 herbicides removed
+  filter(herbicide == "12763099" |
+         herbicide == "12769961" |
+         herbicide ==  "12690527")
+```
+
+# New model
+
+```{r warning=FALSE}
+model_4 <- drm(resp ~ dose, herbicide, fct=W1.3(fixed = c(NA, NA, NA), names = c("slope", "upper", "ed50")), data = new_dt_2)
+summary(model_4)
+```
+
+See here that your removed models converged well. It was not converging before because the amount of herbicides.
+
+# New analysis
+
+I have done this one here just to you see all herbicides individually.
+
+```{r}
+# Nesting data
+nested_data <- new_dt %>% 
+  group_by(herbicide) %>% 
+  nest()
+nested_data
+```
+
+```{r warning=FALSE}
+# Fitting linear models
+drc_models <- nested_data %>% 
+  mutate(models = map(data, ~ drm(resp ~ dose, fct=W1.3(), data = .x)))
+drc_models
+```
+
+```{r warning=FALSE}
+drc_models %>% 
+  mutate(plots = map(models, plot))
+```
